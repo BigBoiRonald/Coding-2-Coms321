@@ -2,6 +2,8 @@
 #include<stdlib.h>
 #include<sys/stat.h>
 #include<sys/mman.h>
+#include<string.h>
+#include<math.h>
 
 int main(int argc, char[] argv){
     int[] lineInfo;
@@ -150,7 +152,12 @@ char[] decompile(int inst, char *storeLoc){
         format = "R";
     }if(rdShift == 10011010110){
         shamt = (inst & 00000000000000001111111111111111) >> 10;
-        opcode = "SDIV" * (shamt == 000010) + "UDIV" * (shamt == 000011);
+        if(shamt == 000010){
+            opcode = "SDIV";
+        }
+        if(shamt == 000011){
+            opcode = "UDIV";
+        }
         format = "R";
     }if(rdShift == 10011011010){
         opcode = "SMULH";
@@ -219,4 +226,43 @@ char[] decompile(int inst, char *storeLoc){
             return "ajhhhhhhh";
 
     }
+}
+
+
+char[10] bToD(int binary, bool isImmediate, int bits, bool telemetry){
+    int deci = 0;
+    char[10] sDeci = "";
+    char[10] rtn = "";
+    bool bitVal;
+
+    for(int i = 0; i < regBit; i++){//converter
+        bitVal = ((binary%pow(10, bits+1-i)) >> (bits-i));//finds one bit, going from most to least important:
+        //ie. 10010: 1 - 1; 2 - 0; 3 - 0; 4 - 1; 5 - 0
+
+        if(telemetry){
+            printf("%d : %d", i, bitVal);
+        }
+
+        deci += pow(2*bitVal, bits-1-i);
+    }
+
+    if(telemetry){
+        printf("Value = %d", deci);
+    }
+
+    sprintf(sDeci, "%d", deci);//change to str and return
+
+    if(isImmediate){
+        rtn = "#";
+    }else{
+        rtn = "X";
+    }
+    strcat(rtn, sDeci);
+
+    if(telemetry){
+        printf("String value : %s", rtn);
+    }
+
+    return rtn;
+    
 }
