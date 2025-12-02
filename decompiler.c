@@ -1,268 +1,363 @@
-#include<stdio.h>
-#include<stdlib.h>
-#include<sys/stat.h>
-#include<sys/mman.h>
-#include<string.h>
-#include<math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
+#include <string.h>
+#include <math.h>
+#include <stdbool.h>
 
-int main(int argc, char[] argv){
-    int[] lineInfo;
+int main(int argc, char *argv)
+{
+    uint32_t lineInfo;
     struct stat buffer;
     int *instArr;
-    char *output;
 
     FILE *f = fopen(argv[1], "r");
-    if(f == NULL){
+    if (f == NULL)
+    {
         printf("file not found");
-        return 1;//error code
+        return 1; // error code
     }
     fstat(f, &buffer);
-    if(fgets(lineInfo, sizeof(lineInfo), f) == NULL){
+    if (fgets(lineInfo, sizeof(lineInfo), f) == NULL)
+    {
         printf("file empty");
         return 1;
     }
-    instArr = mmap(NULL, buffer.st_size/4, PROT_READ | PROT_WRITE, MAP_PRIVATE, f, 0);
-    output = calloc(buffer.st_size/4, sizeof(*output));
+    instArr = mmap(NULL, buffer.st_size / 4, PROT_READ | PROT_WRITE, MAP_PRIVATE, f, 0);
 
-    for(int i = 0; i < buffer.st_size/4; i++){
+    for (int i = 0; i < buffer.st_size / 4; i++)
+    {
         instArr[i] = be32toh(instArr[i]);
-        decompile(instArr[i], output+i);
+        decompile(instArr[i], i);
     }
 
-    return 0;//no error
+    return 0; // no error
 }
 
-char[] decompile(int inst, char *storeLoc){
-    char[10] opcode;
-    char[1] format;
-    int shamt;
-    int rdShift = inst >> 21;
+void decompile(uint32_t inst, int index)
+{
+    char *mnemonic;
+    char format; // Note: Formal O is for B.cond
+    char *label;
 
-    if(inst >> 26 == 100101){//Branch
-        opcode = "BL";
+    // Calculating opcodes
+    uint32_t opcode6 = (inst >> 26) & 0x3F;   // & 0b0011 1111 - 6 bits
+    uint32_t opcode8 = (inst >> 24) & 0xFF;   // & 0b1111 1111 - 8 bits
+    uint32_t opcode10 = (inst >> 22) & 0x3FF; // & 0b0011 1111 1111 - 10 bits
+    uint32_t rdShift = (inst >> 21) & 0x7FF;  // & 0b0111 1111 1111 - 11 bits
+
+    // Other fields
+    uint32_t rt = inst & 0x1F;            // - Least signification 5 bits - also Rd
+    uint32_t rn = (inst >> 5) & 0x1F;     // & 0x0001 1111 - 5 bits
+    uint32_t shamt = (inst >> 10) & 0x3F; // & 0x0011 1111 - 6 bits
+    uint32_t rm = (inst >> 16) & 0x1F;
+    uint32_t alu_immediate = (inst >> 10) & 0xFFF; // 12 bits
+    uint32_t dt_address = (inst >> 12) & 0x1FF;    // 9 bits
+    // Could add the op address here - I dont think it is used
+    uint32_t br_address = inst & 0x3FFFFFF;           // 26 bits
+    uint32_t cond_br_address = (inst >> 5) & 0x7FFFF; // 19 bits
+
+    // Creates Label for each line
+    label = generateLabel(index);
+
+    if (opcode6 == 0b100101)
+    { // Branch
+        mnemonic = "BL";
         format = "B";
-    }if(inst >> 26 == 000101){
-        opcode = "B";
+    }
+    if (opcode6 == 0b000101)
+    {
+        mnemonic = "B";
         format = "B";
-    }if(inst >> 24 == 10110101){//Cond. Branch
-        opcode = "CBNZ";
-        format = "CB"
-    }if(inst >> 24 == 10110100){
-        opcode = "CBZ";
-        format = "CB"
-    }if(inst >> 22 == 1101001000){//Immediate
-        opcode = "EORI";
+    }
+    if (opcode8 == 0b10110101)
+    { // Cond. Branch
+        mnemonic = "CBNZ";
+        format = "C";
+    }
+    if (opcode8 == 0b10110100)
+    {
+        mnemonic = "CBZ";
+        format = "C";
+    }
+    if (opcode8 == 0b01010100) // B.cond
+    {
+        mnemonic = branchConditional(rt);
+        format = "C"; // Conditional Branch
+    }
+    if (opcode10 == 0b1101001000)
+    { // Immediate
+        mnemonic = "EORI";
         format = "I";
-    }if(inst >> 22 == 1001000100){
-        opcode = "ADDI";
+    }
+    if (opcode10 == 0b1001000100)
+    {
+        mnemonic = "ADDI";
         format = "I";
-    }if(inst >> 22 == 1011000100){
-        opcode = "ADDIS";
+    }
+    if (opcode10 == 0b1001001000)
+    {
+        mnemonic = "ANDI";
         format = "I";
-    }if(inst >> 22 == 1001001000){
-        opcode = "ANDI";
+    }
+    if (opcode10 == 0b1011001000)
+    {
+        mnemonic = "ORRI";
         format = "I";
-    }if(inst >> 22 == 1111001000){
-        opcode = "ANDIS";
+    }
+    if (opcode10 == 0b1101000100)
+    {
+        mnemonic = "SUBI";
         format = "I";
-    }if(inst >> 22 == 1011001000){
-        opcode = "ORRI";
+    }
+    if (opcode10 == 0b1111000100)
+    {
+        mnemonic = "SUBIS";
         format = "I";
-    }if(inst >> 22 == 1101000100){
-        opcode = "SUBI";
-        format = "I";
-    }if(inst >> 22 == 1111000100){
-        opcode = "SUBIS";
-        format = "I";
-    }if(rdShift == 11101010000){//Register
-        opcode = "ANDS";
+    }
+    if (rdShift == 0b10001011000)
+    {
+        mnemonic = "ADD";
         format = "R";
-    }if(rdShift == 10001011000){
-        opcode = "ADD";
+    }
+    if (rdShift == 0b10001010000)
+    {
+        mnemonic = "AND";
         format = "R";
-    }if(rdShift == 10101011000){
-        opcode = "ADDS";
+    }
+    if (rdShift == 0b11010110000)
+    {
+        mnemonic = "BR";
         format = "R";
-    }if(rdShift == 10001010000){
-        opcode = "AND";
+    }
+    if (rdShift == 0b11111111110)
+    {
+        mnemonic = "DUMP";
         format = "R";
-    }if(rdShift == 11010110000){
-        opcode = "BR";
+    }
+    if (rdShift == 0b11001010000)
+    {
+        mnemonic = "EOR";
         format = "R";
-    }if(rdShift == 11111111110){
-        opcode = "DUMP";
+    }
+    if (rdShift == 0b11111111111)
+    {
+        mnemonic = "HALT";
         format = "R";
-    }if(rdShift == 11001010000){
-        opcode = "EOR";
+    }
+    if (rdShift == 0b11010011011)
+    {
+        mnemonic = "LSL";
         format = "R";
-    }if(rdShift == 00011110011){//The double fs 
-        shamt = (inst & 00000000000000001111111111111111) >> 10;
-        if(shamt == 000010){
-            opcode = "FMULD";
-        }if(shamt == 000110){
-            opcode = "FDIVD";
-        }if(shamt == 001000){
-            opcode = "FCMPD";
-        }if(shamt == 001010){
-            opcode = "FADDD";
-        }if(shamt == 001110){
-            opcode = "FSUBD";
-        }
-        format = "R"
-    }if(rdShift == 00011110001){//The single fs
-        shamt = (inst & 00000000000000001111111111111111) >> 10;
-        if(shamt == 000010){
-            opcode = "FMULS";
-        }if(shamt == 000110){
-            opcode = "FDIVS";
-        }if(shamt == 001000){
-            opcode = "FCMPS";
-        }if(shamt == 001010){
-            opcode = "FADDS";
-        }if(shamt == 001110){
-            opcode = "FSUBS";
-        }
-        format = "R"
-    }if(rdShift == 11111111111){
-        opcode = "HALT";
+    }
+    if (rdShift == 0b11010011010)
+    {
+        mnemonic = "LSR";
         format = "R";
-    }if(rdShift == 11111100010){
-        opcode = "LDURD";
+    }
+    if (rdShift == 0b10011011000)
+    {
+        mnemonic = "MUL";
         format = "R";
-    }if(rdShift == 10111100010){
-        opcode = "LDURS";
+    }
+    if (rdShift == 0b10101010000)
+    {
+        mnemonic = "ORR";
         format = "R";
-    }if(rdShift == 11010011011){
-        opcode = "LSL";
+    }
+    if (rdShift == 0b11111111100)
+    {
+        mnemonic = "PRNL";
         format = "R";
-    }if(rdShift == 11010011010){
-        opcode = "LSR";
+    }
+    if (rdShift == 0b11111111101)
+    {
+        mnemonic = "PRNT";
         format = "R";
-    }if(rdShift == 10011011000){
-        opcode = "MUL";
+    }
+    if (rdShift == 0b11001011000)
+    {
+        mnemonic = "SUB";
         format = "R";
-    }if(rdShift == 10101010000){
-        opcode = "ORR";
+    }
+    if (rdShift == 0b11101011000)
+    {
+        mnemonic = "SUBS";
         format = "R";
-    }if(rdShift == 11111111100){
-        opcode = "PRNL";
-        format = "R";
-    }if(rdShift == 11111111101){
-        opcode = "PRNT";
-        format = "R";
-    }if(rdShift == 10011010110){
-        shamt = (inst & 00000000000000001111111111111111) >> 10;
-        if(shamt == 000010){
-            opcode = "SDIV";
-        }
-        if(shamt == 000011){
-            opcode = "UDIV";
-        }
-        format = "R";
-    }if(rdShift == 10011011010){
-        opcode = "SMULH";
-        format = "R";
-    }if(rdShift == 11111100000){
-        opcode = "STURD";
-        format = "R";
-    }if(rdShift == 10111100000){
-        opcode = "STURS";
-        format = "R";
-    }if(rdShift == 11001011000){
-        opcode = "SUB";
-        format = "R";
-    }if(rdShift == 11101011000){
-        opcode = "SUBS";
-        format = "R";
-    }if(rdShift == 10011011110){
-        opcode = "UMULH";
-        format = "R";
-    }if(rdShift == 11111000010){//Data
-        opcode = "LOAD";
-        format = "D";
-    }if(rdShift == 00111000010){
-        opcode = "LDURB";
-        format = "D";
-    }if(rdShift == 01111000010){
-        opcode = "LDURH";
-        format = "D";
-    }if(rdShift == 10111000100){
-        opcode = "LDURSW";
-        format = "D";
-    }if(rdShift == 11111000000){
-        opcode = "STUR";
-        format = "D";
-    }if(rdShift == 00111000000){
-        opcode = "STURB";
-        format = "D";
-    }if(rdShift == 01111000000){
-        opcode = "STURH";
-        format = "D";
-    }if(rdShift == 10111000000){
-        opcode = "STURW";
+    }
+    if (rdShift == 0b11111000010)
+    { // Data
+        mnemonic = "LDUR";
         format = "D";
     }
+    if (rdShift == 0b11111000000)
+    {
+        mnemonic = "STUR";
+        format = 'D';
+    }
 
-    switch(format){
-        case "B":
-            return "1";
-            
-        case "CB":
-            return "2";
-            
-        case "I":
-            return "3";
-        
-        case "R":
-            return "4";
-        
-        case "D":
-            return "5";
-        
-        case "IW":
-            return "6";
-        
-        else:
-            return "ajhhhhhhh";
+    switch (format)
+    {
+    case 'B':
+        return "1";
 
+    case 'C':
+        return "2";
+
+    case 'I':
+        return "3";
+
+    case 'R':
+        return "4";
+
+    case 'D':
+        return "5";
+    default:
+        return "ajhhhhhhh";
     }
 }
 
-
-char[10] bToD(int binary, bool isImmediate, int bits, bool telemetry){
+char *bToD(uint32_t binary, bool isImmediate, int bits, bool telemetry)
+{
     int deci = 0;
-    char[10] sDeci = "";
-    char[10] rtn = "";
+    char *sDeci;
+    char *rtn;
     bool bitVal;
+    bool neg = 0;
 
-    for(int i = 0; i < regBit; i++){//converter
-        bitVal = ((binary%pow(10, bits+1-i)) >> (bits-i));//finds one bit, going from most to least important:
-        //ie. 10010: 1 - 1; 2 - 0; 3 - 0; 4 - 1; 5 - 0
+    if (binary >> (bits - 1) & 0x01 == 1)
+    {
+        neg = 1;
+        binary = ~binary - 1;
+    }
 
-        if(telemetry){
+    for (int i = 0; i < bits; i++)
+    {                                                                               // converter
+        bitVal = ((int)(binary % pow(10.0, (double)(bits + 1 - i))) >> (bits - i)); // finds one bit, going from most to least important:
+        // ie. 10010: 1 - 1; 2 - 0; 3 - 0; 4 - 1; 5 - 0
+
+        if (telemetry)
+        {
             printf("%d : %d", i, bitVal);
         }
 
-        deci += pow(2*bitVal, bits-1-i);
+        deci += pow(2 * bitVal, bits - 1 - i);
     }
 
-    if(telemetry){
+    if (telemetry)
+    {
         printf("Value = %d", deci);
     }
 
-    sprintf(sDeci, "%d", deci);//change to str and return
+    sprintf(*sDeci, "%d", deci); // change to str and return
 
-    if(isImmediate){
-        rtn = "#";
-    }else{
-        rtn = "X";
+    if (isImmediate)
+    {
+        *rtn = "#";
     }
-    strcat(rtn, sDeci);
+    else
+    {
+        *rtn = "X";
+    }
+    strcat(*rtn, *sDeci);
 
-    if(telemetry){
-        printf("String value : %s", rtn);
+    if (telemetry)
+    {
+        printf("String value : %s", *rtn);
     }
 
     return rtn;
-    
+}
+
+char[4] branchConditional(uint32_t Rt)
+{
+    switch (rt)
+    {
+    case 0b00000:
+        return "B.EQ";
+    case 0b00001:
+        return "B.NE";
+    case 0b00010:
+        return "B.HS";
+    case 0b00011:
+        return "B.LO";
+    case 0b00100:
+        return "B.MI";
+    case 0b00101:
+        return "B.PL";
+    case 0b00110:
+        return "B.VS";
+    case 0b00111:
+        return "B.VC";
+    case 0b01000:
+        return "B.HI";
+    case 0b01001:
+        return "B.LS";
+    case 0b01010:
+        return "B.GE";
+    case 0b01011:
+        return "B.LT";
+    case 0b01100:
+        return "B.GT";
+    case 0b01101:
+        return "B.LE";
+    default:
+        return "B.DF";
+    }
+}
+
+char *generateLabel(int index)
+{
+    static char label[5];
+    sprintf(label, "L%03d", index);
+    return label;
+}
+
+char *branchLabel(int distance, char *currLabel)
+{
+    static char resultLabel[5];
+    int currIndex;
+
+    // Gets the number value of the label
+    sscanf(currLabel, "L%d", &currIndex);
+    // Calculates the target label index
+    int targetIndex = currIndex + distance;
+    // Returns the resulting label
+    sprintf(resultLabel, "L%03d", targetIndex);
+    return resultLabel;
+}
+
+int binaryToIntwithNegative(uint32_t binary, int bitLength)
+{
+    // number is a branch address
+    if (bitLength == 26)
+    {
+        // Is negative (MSB is 1)
+        if (((binary >> 25) & 0x1) == 1)
+        {
+            binary -= 1;
+            binary = ~binary;
+        }
+    }
+    // Number is a conditional branch address
+    else if (bitLength == 19)
+    {
+        // Is negative (MSB is 1)
+        if (((binary >> 23) & 0x1) == 1)
+        {
+            binary -= 1;
+            binary = ~binary;
+        }
+    }
+    // D type
+    else
+    {
+        // Is negative (MSB is 1)
+        if (((binary >> 20) & 0x1) == 1)
+        {
+            binary -= 1;
+            binary = ~binary;
+        }
+    }
 }
