@@ -59,7 +59,7 @@ void decompile(uint32_t inst, int index)
     uint32_t cond_br_address = (inst >> 5) & 0x7FFFF; // 19 bits
 
     // Creates Label for each line
-    label = generateLabel(index);
+    //label = generateLabel(index);
 
     if (opcode6 == 0b100101)
     { // Branch
@@ -196,29 +196,39 @@ void decompile(uint32_t inst, int index)
         mnemonic = "STUR";
         format = 'D';
     }
+    char[15] rtn;
 
     switch (format)
     {
     case 'B':
-        return "1";
+        char[5] lbl;
+        sprintf(lbl, "L%3d", index);
+        sprintf(rtn, "%s: %s %s", lbl, mnemonic, *branchLabel(*bToD(inst & 0x3FFFFFF), lbl));
+        return rtn;
 
     case 'C':
-        return "2";
+        char[5] lbl;
+        sprintf(lbl, "L%3d", index);
+        sprintf(rtn, "%s: %s, %s", lbl, mnemonic, *bToD(inst & 0x10), *branchLabel(*bToD((inst >> 5) & 0x7FFFF), lbl));
+        return rtn;
 
     case 'I':
-        return "3";
+        sprintf(rtn, "L%3d: %s X%s, X%s, #%s", index, mnemonic, *bToD(inst & 0x10), *bToD((inst >> 5) & 0x10), *bToD((inst >> 10) & 0xFFF)); 
+        return rtn;
 
     case 'R':
-        return "4";
+        sprintf(rtn, "L%3d: %s X%s, X%s, X%s", index, mnemonic, *bToD(inst & 0x10), *bToD((inst >> 5) & 0x10), *bToD((inst >> 16) & 0x10));
+        return rtn;
 
     case 'D':
-        return "5";
+        sprintf(rtn, "L%3d: %s X%s, [X%s, #%s]", index, mnemonic, *bToD(inst & 0x10), *bToD((inst >> 5) & 0x10), *bToD((inst >> 12) & 0x1FF));
+        return rtn;
     default:
         return "ajhhhhhhh";
     }
 }
 
-char *bToD(uint32_t binary, bool isImmediate, int bits, bool telemetry)
+char *bToD(uint32_t binary, int bits, bool telemetry)
 {
     int deci = 0;
     char *sDeci;
@@ -252,20 +262,11 @@ char *bToD(uint32_t binary, bool isImmediate, int bits, bool telemetry)
 
     sprintf(*sDeci, "%d", deci); // change to str and return
 
-    if (isImmediate)
-    {
-        *rtn = "#";
-    }
-    else
-    {
-        *rtn = "X";
-    }
-    strcat(*rtn, *sDeci);
-
     if (telemetry)
     {
         printf("String value : %s", *rtn);
     }
+    if(negative){sprintf(rtn, "-%s", rtn);}
 
     return rtn;
 }
@@ -327,7 +328,7 @@ char *branchLabel(int distance, char *currLabel)
     sprintf(resultLabel, "L%03d", targetIndex);
     return resultLabel;
 }
-
+/*
 int binaryToIntwithNegative(uint32_t binary, int bitLength)
 {
     // number is a branch address
@@ -360,4 +361,4 @@ int binaryToIntwithNegative(uint32_t binary, int bitLength)
             binary = ~binary;
         }
     }
-}
+}*/
