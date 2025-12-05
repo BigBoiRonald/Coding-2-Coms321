@@ -41,7 +41,6 @@ int main(int argc, char *argv[])
 
 void decompile(uint32_t inst, int index)
 {
-    printf("instance inside decompile%d\n", inst);
     char *mnemonic;
     char format; // Note: Formal O is for B.cond
 
@@ -59,14 +58,14 @@ void decompile(uint32_t inst, int index)
     uint32_t alu_immediate = (inst >> 10) & 0xFFF; // 12 bits
     uint32_t dt_address = (inst >> 12) & 0x1FF;    // 9 bits
 
-    printf("Rt: %d, rn: %d, RM: %d\n", rt, rn, rm);
-    printf("Shamt: %d, immediate: %d, dt_address: %d\n", shamt, alu_immediate, dt_address);
+    // printf("Rt: %d, rn: %d, RM: %d\n", rt, rn, rm);
+    // printf("Shamt: %d, immediate: %d, dt_address: %d\n", shamt, alu_immediate, dt_address);
 
     // Could add the op address here - I dont think it is used
     uint32_t br_address = inst & 0x3FFFFFF;           // 26 bits
     uint32_t cond_br_address = (inst >> 5) & 0x7FFFF; // 19 bits
 
-    printf("Branch address: %d, conditional Branch address: %d\n", br_address, cond_br_address);
+    // printf("Branch address: %d, conditional Branch address: %d\n", br_address, cond_br_address);
 
     if (opcode6 == 0b100101)
     { // Branch
@@ -91,7 +90,7 @@ void decompile(uint32_t inst, int index)
     if (opcode8 == 0b01010100) // B.cond
     {
         mnemonic = branchConditional(rt);
-        format = 'B'; // Conditional Branch
+        format = 'O'; // Conditional Branch
     }
     if (opcode10 == 0b1101001000)
     { // Immediate
@@ -204,15 +203,20 @@ void decompile(uint32_t inst, int index)
         format = 'D';
     }
 
+    char *label;
     switch (format)
     {
     case 'B':
-        char *label = generateLabel(index);
+        label = generateLabel(index);
         printf("%s: %s %s", label, mnemonic, branchLabel(atoi(binaryToDecimal(br_address, 26, true, false)), label));
         break;
     case 'C':
-        char *label = generateLabel(index);
+        label = generateLabel(index);
         printf("%s: %s X%d, %s", label, mnemonic, rt, branchLabel(atoi(binaryToDecimal(cond_br_address, 19, true, false)), label));
+        break;
+    case 'O':
+        label = generateLabel(index);
+        printf("%s: %s %s", label, mnemonic, branchLabel(atoi(binaryToDecimal(cond_br_address, 19, true, false)), label));
         break;
     case 'I':
         printf("%s: %s X%d, X%d, #%s", generateLabel(index), mnemonic, rt, rn, binaryToDecimal(alu_immediate, 12, true, false));
@@ -243,14 +247,14 @@ char *binaryToDecimal(uint32_t binary, int bits, bool negPossible, bool telemetr
     {
         deci = ((int32_t)binary);
     }
-    printf("Deci %d, binary %d\n", deci, binary);
     sprintf(sDeci, "%d", deci); // change to str and return
 
     if (telemetry)
     {
+        printf("Deci %d, binary %d\n", deci, binary);
         printf("String value : %s", sDeci);
+        printf("sDeci: %s\n", sDeci);
     }
-    printf("sDeci: %s\n", sDeci);
     return sDeci;
 }
 
