@@ -1,0 +1,1 @@
+gcc decompiler.c -o decompiler

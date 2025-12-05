@@ -1,0 +1,1 @@
+./decompiler $1

@@ -1,35 +1,39 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <string.h>
 #include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
 
-int main(int argc, char *argv)
+char *branchConditional(uint32_t Rt);
+void decompile(uint32_t inst, int index);
+char *binaryToDecimal(uint32_t binary, int bits, bool negPossible, bool telemetry);
+char *generateLabel(int index);
+char *branchLabel(int distance, char *currLabel);
+
+int main(int argc, char *argv[])
 {
-    uint32_t lineInfo;
     struct stat buffer;
-    int *instArr;
+    uint32_t *instArr;
 
-    FILE *f = fopen(argv[1], "r");
-    if (f == NULL)
+    int fd = open(argv[1], O_RDONLY);
+    if (fd == -1)
     {
-        printf("file not found");
+        printf("Error opening file");
         return 1; // error code
     }
-    fstat(f, &buffer);
-    if (fgets(lineInfo, sizeof(lineInfo), f) == NULL)
+    fstat(fd, &buffer);
+    instArr = mmap(NULL, buffer.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    for (size_t i = 0; i < buffer.st_size / 4; i++)
     {
-        printf("file empty");
-        return 1;
-    }
-    instArr = mmap(NULL, buffer.st_size / 4, PROT_READ | PROT_WRITE, MAP_PRIVATE, f, 0);
-
-    for (int i = 0; i < buffer.st_size / 4; i++)
-    {
-        instArr[i] = be32toh(instArr[i]);
-        decompile(instArr[i], i);
+        uint32_t val = be32toh(instArr[i]);
+        decompile(val, (int)i);
     }
 
     return 0; // no error
@@ -37,9 +41,9 @@ int main(int argc, char *argv)
 
 void decompile(uint32_t inst, int index)
 {
+    printf("instance inside decompile%d\n", inst);
     char *mnemonic;
     char format; // Note: Formal O is for B.cond
-    char *label;
 
     // Calculating opcodes
     uint32_t opcode6 = (inst >> 26) & 0x3F;   // & 0b0011 1111 - 6 bits
@@ -54,226 +58,205 @@ void decompile(uint32_t inst, int index)
     uint32_t rm = (inst >> 16) & 0x1F;
     uint32_t alu_immediate = (inst >> 10) & 0xFFF; // 12 bits
     uint32_t dt_address = (inst >> 12) & 0x1FF;    // 9 bits
+
+    printf("Rt: %d, rn: %d, RM: %d\n", rt, rn, rm);
+    printf("Shamt: %d, immediate: %d, dt_address: %d\n", shamt, alu_immediate, dt_address);
+
     // Could add the op address here - I dont think it is used
     uint32_t br_address = inst & 0x3FFFFFF;           // 26 bits
     uint32_t cond_br_address = (inst >> 5) & 0x7FFFF; // 19 bits
 
-    // Creates Label for each line
-    //label = generateLabel(index);
+    printf("Branch address: %d, conditional Branch address: %d\n", br_address, cond_br_address);
 
     if (opcode6 == 0b100101)
     { // Branch
         mnemonic = "BL";
-        format = "B";
+        format = 'B';
     }
     if (opcode6 == 0b000101)
     {
         mnemonic = "B";
-        format = "B";
+        format = 'B';
     }
     if (opcode8 == 0b10110101)
     { // Cond. Branch
         mnemonic = "CBNZ";
-        format = "C";
+        format = 'C';
     }
     if (opcode8 == 0b10110100)
     {
         mnemonic = "CBZ";
-        format = "C";
+        format = 'C';
     }
     if (opcode8 == 0b01010100) // B.cond
     {
         mnemonic = branchConditional(rt);
-        format = "C"; // Conditional Branch
+        format = 'B'; // Conditional Branch
     }
     if (opcode10 == 0b1101001000)
     { // Immediate
         mnemonic = "EORI";
-        format = "I";
+        format = 'I';
     }
     if (opcode10 == 0b1001000100)
     {
         mnemonic = "ADDI";
-        format = "I";
+        format = 'I';
     }
     if (opcode10 == 0b1001001000)
     {
         mnemonic = "ANDI";
-        format = "I";
+        format = 'I';
     }
     if (opcode10 == 0b1011001000)
     {
         mnemonic = "ORRI";
-        format = "I";
+        format = 'I';
     }
     if (opcode10 == 0b1101000100)
     {
         mnemonic = "SUBI";
-        format = "I";
+        format = 'I';
     }
     if (opcode10 == 0b1111000100)
     {
         mnemonic = "SUBIS";
-        format = "I";
+        format = 'I';
     }
     if (rdShift == 0b10001011000)
     {
         mnemonic = "ADD";
-        format = "R";
+        format = 'R';
     }
     if (rdShift == 0b10001010000)
     {
         mnemonic = "AND";
-        format = "R";
+        format = 'R';
     }
     if (rdShift == 0b11010110000)
     {
         mnemonic = "BR";
-        format = "R";
+        format = 'R';
     }
     if (rdShift == 0b11111111110)
     {
         mnemonic = "DUMP";
-        format = "R";
+        format = 'R';
     }
     if (rdShift == 0b11001010000)
     {
         mnemonic = "EOR";
-        format = "R";
+        format = 'R';
     }
     if (rdShift == 0b11111111111)
     {
         mnemonic = "HALT";
-        format = "R";
+        format = 'R';
     }
     if (rdShift == 0b11010011011)
     {
         mnemonic = "LSL";
-        format = "R";
+        format = 'R';
     }
     if (rdShift == 0b11010011010)
     {
         mnemonic = "LSR";
-        format = "R";
+        format = 'R';
     }
     if (rdShift == 0b10011011000)
     {
         mnemonic = "MUL";
-        format = "R";
+        format = 'R';
     }
     if (rdShift == 0b10101010000)
     {
         mnemonic = "ORR";
-        format = "R";
+        format = 'R';
     }
     if (rdShift == 0b11111111100)
     {
         mnemonic = "PRNL";
-        format = "R";
+        format = 'R';
     }
     if (rdShift == 0b11111111101)
     {
         mnemonic = "PRNT";
-        format = "R";
+        format = 'R';
     }
     if (rdShift == 0b11001011000)
     {
         mnemonic = "SUB";
-        format = "R";
+        format = 'R';
     }
     if (rdShift == 0b11101011000)
     {
         mnemonic = "SUBS";
-        format = "R";
+        format = 'R';
     }
     if (rdShift == 0b11111000010)
     { // Data
         mnemonic = "LDUR";
-        format = "D";
+        format = 'D';
     }
     if (rdShift == 0b11111000000)
     {
         mnemonic = "STUR";
         format = 'D';
     }
-    char[15] rtn;
 
     switch (format)
     {
     case 'B':
-        char[5] lbl;
-        sprintf(lbl, "L%3d", index);
-        sprintf(rtn, "%s: %s %s", lbl, mnemonic, *branchLabel(*bToD(inst & 0x3FFFFFF), lbl));
-        return rtn;
-
+        char *label = generateLabel(index);
+        printf("%s: %s %s", label, mnemonic, branchLabel(atoi(binaryToDecimal(br_address, 26, true, false)), label));
+        break;
     case 'C':
-        char[5] lbl;
-        sprintf(lbl, "L%3d", index);
-        sprintf(rtn, "%s: %s, %s", lbl, mnemonic, *bToD(inst & 0x10), *branchLabel(*bToD((inst >> 5) & 0x7FFFF), lbl));
-        return rtn;
-
+        char *label = generateLabel(index);
+        printf("%s: %s X%d, %s", label, mnemonic, rt, branchLabel(atoi(binaryToDecimal(cond_br_address, 19, true, false)), label));
+        break;
     case 'I':
-        sprintf(rtn, "L%3d: %s X%s, X%s, #%s", index, mnemonic, *bToD(inst & 0x10), *bToD((inst >> 5) & 0x10), *bToD((inst >> 10) & 0xFFF)); 
-        return rtn;
-
+        printf("%s: %s X%d, X%d, #%s", generateLabel(index), mnemonic, rt, rn, binaryToDecimal(alu_immediate, 12, true, false));
+        break;
     case 'R':
-        sprintf(rtn, "L%3d: %s X%s, X%s, X%s", index, mnemonic, *bToD(inst & 0x10), *bToD((inst >> 5) & 0x10), *bToD((inst >> 16) & 0x10));
-        return rtn;
-
+        printf("%s: %s X%d, X%d, X%d", generateLabel(index), mnemonic, rt, rn, rm);
+        break;
     case 'D':
-        sprintf(rtn, "L%3d: %s X%s, [X%s, #%s]", index, mnemonic, *bToD(inst & 0x10), *bToD((inst >> 5) & 0x10), *bToD((inst >> 12) & 0x1FF));
-        return rtn;
+        printf("%s: %s X%d, [X%d, #%s]", generateLabel(index), mnemonic, rt, rn, binaryToDecimal(dt_address, 9, true, false));
+        break;
     default:
-        return "ajhhhhhhh";
+        printf("Something broke");
+        break;
     }
+    printf("\n");
 }
 
-char *bToD(uint32_t binary, int bits, bool telemetry)
+char *binaryToDecimal(uint32_t binary, int bits, bool negPossible, bool telemetry)
 {
-    int deci = 0;
-    char *sDeci;
-    char *rtn;
-    bool bitVal;
-    bool neg = 0;
-
-    if (binary >> (bits - 1) & 0x01 == 1)
+    static char sDeci[32];
+    int32_t deci;
+    if (negPossible)
     {
-        neg = 1;
-        binary = ~binary - 1;
+        // Need to sign extend binary
+        deci = ((int32_t)(binary << (32 - bits)) >> (32 - bits));
     }
-
-    for (int i = 0; i < bits; i++)
-    {                                                                               // converter
-        bitVal = ((int)(binary % pow(10.0, (double)(bits + 1 - i))) >> (bits - i)); // finds one bit, going from most to least important:
-        // ie. 10010: 1 - 1; 2 - 0; 3 - 0; 4 - 1; 5 - 0
-
-        if (telemetry)
-        {
-            printf("%d : %d", i, bitVal);
-        }
-
-        deci += pow(2 * bitVal, bits - 1 - i);
+    else
+    {
+        deci = ((int32_t)binary);
     }
+    printf("Deci %d, binary %d\n", deci, binary);
+    sprintf(sDeci, "%d", deci); // change to str and return
 
     if (telemetry)
     {
-        printf("Value = %d", deci);
+        printf("String value : %s", sDeci);
     }
-
-    sprintf(*sDeci, "%d", deci); // change to str and return
-
-    if (telemetry)
-    {
-        printf("String value : %s", *rtn);
-    }
-    if(negative){sprintf(rtn, "-%s", rtn);}
-
-    return rtn;
+    printf("sDeci: %s\n", sDeci);
+    return sDeci;
 }
 
-char[4] branchConditional(uint32_t Rt)
+char *branchConditional(uint32_t Rt)
 {
-    switch (rt)
+    switch (Rt)
     {
     case 0b00000:
         return "B.EQ";
@@ -328,37 +311,3 @@ char *branchLabel(int distance, char *currLabel)
     sprintf(resultLabel, "L%03d", targetIndex);
     return resultLabel;
 }
-/*
-int binaryToIntwithNegative(uint32_t binary, int bitLength)
-{
-    // number is a branch address
-    if (bitLength == 26)
-    {
-        // Is negative (MSB is 1)
-        if (((binary >> 25) & 0x1) == 1)
-        {
-            binary -= 1;
-            binary = ~binary;
-        }
-    }
-    // Number is a conditional branch address
-    else if (bitLength == 19)
-    {
-        // Is negative (MSB is 1)
-        if (((binary >> 23) & 0x1) == 1)
-        {
-            binary -= 1;
-            binary = ~binary;
-        }
-    }
-    // D type
-    else
-    {
-        // Is negative (MSB is 1)
-        if (((binary >> 20) & 0x1) == 1)
-        {
-            binary -= 1;
-            binary = ~binary;
-        }
-    }
-}*/
