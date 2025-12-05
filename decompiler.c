@@ -135,12 +135,12 @@ void decompile(uint32_t inst, int index)
     if (rdShift == 0b11010110000)
     {
         mnemonic = "BR";
-        format = 'R';
+        format = 'L';
     }
     if (rdShift == 0b11111111110)
     {
         mnemonic = "DUMP";
-        format = 'R';
+        format = 'S';
     }
     if (rdShift == 0b11001010000)
     {
@@ -150,7 +150,7 @@ void decompile(uint32_t inst, int index)
     if (rdShift == 0b11111111111)
     {
         mnemonic = "HALT";
-        format = 'R';
+        format = 'S';
     }
     if (rdShift == 0b11010011011)
     {
@@ -175,12 +175,12 @@ void decompile(uint32_t inst, int index)
     if (rdShift == 0b11111111100)
     {
         mnemonic = "PRNL";
-        format = 'R';
+        format = 'S';
     }
     if (rdShift == 0b11111111101)
     {
         mnemonic = "PRNT";
-        format = 'R';
+        format = 's';
     }
     if (rdShift == 0b11001011000)
     {
@@ -224,8 +224,17 @@ void decompile(uint32_t inst, int index)
     case 'R':
         printf("%s: %s X%d, X%d, X%d", generateLabel(index), mnemonic, rt, rn, rm);
         break;
+    case 'L': // for BR
+        printf("%s: %s X%d", generateLabel(index), mnemonic, rn);
+        break;
     case 'D':
         printf("%s: %s X%d, [X%d, #%s]", generateLabel(index), mnemonic, rt, rn, binaryToDecimal(dt_address, 9, true, false));
+        break;
+    case 'S': // HALT, DUMP, PRNL
+        printf("%s: %s", generateLabel(index), mnemonic);
+        break;
+    case 's':
+        printf("%s: %s X%d", generateLabel(index), mnemonic, rt);
         break;
     default:
         printf("Something broke");

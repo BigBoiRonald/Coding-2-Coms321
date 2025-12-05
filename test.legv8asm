@@ -1,5 +1,4 @@
-start: SUB X12, X10, XZR
-SUBI SP, SP, #8
-LDUR X2, [X12, #124]
-CBZ X11, start
-B.GE start
+PRNT X3
+PRNL
+DUMP
+HALT
