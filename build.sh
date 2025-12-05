@@ -1,1 +1,1 @@
-gcc decompiler.c -o decompiler
+gcc disassembler.c -o disassembler

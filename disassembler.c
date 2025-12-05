@@ -16,6 +16,7 @@ void decompile(uint32_t inst, int index);
 char *binaryToDecimal(uint32_t binary, int bits, bool negPossible, bool telemetry);
 char *generateLabel(int index);
 char *branchLabel(int distance, char *currLabel);
+char *regName(uint32_t r);
 
 int main(int argc, char *argv[])
 {
@@ -155,12 +156,12 @@ void decompile(uint32_t inst, int index)
     if (rdShift == 0b11010011011)
     {
         mnemonic = "LSL";
-        format = 'R';
+        format = 'F';
     }
     if (rdShift == 0b11010011010)
     {
         mnemonic = "LSR";
-        format = 'R';
+        format = 'F';
     }
     if (rdShift == 0b10011011000)
     {
@@ -204,6 +205,9 @@ void decompile(uint32_t inst, int index)
     }
 
     char *label;
+    char *rtName;
+    char *rnName;
+    char *rmName;
     switch (format)
     {
     case 'B':
@@ -212,29 +216,44 @@ void decompile(uint32_t inst, int index)
         break;
     case 'C':
         label = generateLabel(index);
-        printf("%s: %s X%d, %s", label, mnemonic, rt, branchLabel(atoi(binaryToDecimal(cond_br_address, 19, true, false)), label));
+        rtName = regName(rt);
+        printf("%s: %s %s, %s", label, mnemonic, rtName, branchLabel(atoi(binaryToDecimal(cond_br_address, 19, true, false)), label));
         break;
     case 'O':
         label = generateLabel(index);
         printf("%s: %s %s", label, mnemonic, branchLabel(atoi(binaryToDecimal(cond_br_address, 19, true, false)), label));
         break;
     case 'I':
-        printf("%s: %s X%d, X%d, #%s", generateLabel(index), mnemonic, rt, rn, binaryToDecimal(alu_immediate, 12, true, false));
+        rtName = regName(rt);
+        rnName = regName(rn);
+        printf("%s: %s %s, %s, #%s", generateLabel(index), mnemonic, rtName, rnName, binaryToDecimal(alu_immediate, 12, true, false));
         break;
     case 'R':
-        printf("%s: %s X%d, X%d, X%d", generateLabel(index), mnemonic, rt, rn, rm);
+        rtName = regName(rt);
+        rnName = regName(rn);
+        rmName = regName(rm);
+        printf("%s: %s %s, %s, %s", generateLabel(index), mnemonic, rtName, rnName, rmName);
+        break;
+    case 'F': // For shift
+        rtName = regName(rt);
+        rnName = regName(rn);
+        printf("%s: %s %s, %s, #%s", generateLabel(index), mnemonic, rtName, rnName, binaryToDecimal(shamt, 6, true, false));
         break;
     case 'L': // for BR
-        printf("%s: %s X%d", generateLabel(index), mnemonic, rn);
+        rnName = regName(rn);
+        printf("%s: %s %s", generateLabel(index), mnemonic, rnName);
         break;
     case 'D':
-        printf("%s: %s X%d, [X%d, #%s]", generateLabel(index), mnemonic, rt, rn, binaryToDecimal(dt_address, 9, true, false));
+        rtName = regName(rt);
+        rnName = regName(rn);
+        printf("%s: %s %s, [%s, #%s]", generateLabel(index), mnemonic, rtName, rnName, binaryToDecimal(dt_address, 9, true, false));
         break;
     case 'S': // HALT, DUMP, PRNL
         printf("%s: %s", generateLabel(index), mnemonic);
         break;
     case 's':
-        printf("%s: %s X%d", generateLabel(index), mnemonic, rt);
+        rtName = regName(rt);
+        printf("%s: %s %s", generateLabel(index), mnemonic, rtName);
         break;
     default:
         printf("Something broke");
@@ -264,6 +283,7 @@ char *binaryToDecimal(uint32_t binary, int bits, bool negPossible, bool telemetr
         printf("String value : %s", sDeci);
         printf("sDeci: %s\n", sDeci);
     }
+
     return sDeci;
 }
 
@@ -306,14 +326,14 @@ char *branchConditional(uint32_t Rt)
 
 char *generateLabel(int index)
 {
-    static char label[5];
-    sprintf(label, "L%03d", index);
+    static char label[30];        // UPDATE
+    sprintf(label, "L%d", index); // UPDATE
     return label;
 }
 
 char *branchLabel(int distance, char *currLabel)
 {
-    static char resultLabel[5];
+    static char resultLabel[30]; // UPDATE
     int currIndex;
 
     // Gets the number value of the label
@@ -321,6 +341,30 @@ char *branchLabel(int distance, char *currLabel)
     // Calculates the target label index
     int targetIndex = currIndex + distance;
     // Returns the resulting label
-    sprintf(resultLabel, "L%03d", targetIndex);
+    sprintf(resultLabel, "L%d", targetIndex); // UPDATE
     return resultLabel;
+}
+
+char *regName(uint32_t r)
+{
+    // SP - X28, FP - X29, LR - X30, XZR - X31
+    char *newreg = malloc(32);
+    if (r == 31)
+    {
+        return "XZR";
+    }
+    if (r == 30)
+    {
+        return "LR";
+    }
+    if (r == 29)
+    {
+        return "FP";
+    }
+    if (r == 28)
+    {
+        return "SP";
+    }
+    sprintf(newreg, "X%d", r);
+    return newreg;
 }

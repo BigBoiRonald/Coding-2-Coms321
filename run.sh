@@ -1,1 +1,1 @@
-./decompiler $1
+./disassembler $1
